@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Light and Pothole Detection</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background-color: #f4f4f9; color: #333; }
+        nav { background-color: #87CEEB; color: white; padding: 10px 20px; display: flex; justify-content: space-between; }
+        nav .nav-links { list-style: none; display: flex; }
+        nav .nav-links li { margin: 0 15px; }
+        nav .nav-links li a { color: white; text-decoration: none; font-weight: bold; }
+        nav .nav-links li a:hover { color: #45a049; }
+        .container { display: flex; flex-wrap: wrap; justify-content: space-between; padding: 20px; }
+        .info-container { flex: 1; max-width: 35%; background-color: #ffffff; padding: 20px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); }
+        .info-container h2 { font-size: 28px; margin-bottom: 15px; color: #0000FF; }
+        .video-container { flex: 1; max-width: 60%; padding: 20px; }
+        .video-container video { width: 100%; border: 2px solid #ccc; border-radius: 10px; }
+        button { margin-top: 15px; padding: 10px 20px; border: none; border-radius: 5px; background-color: #007bff; color: white; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .output { margin-top: 15px; font-size: 18px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<nav>
+    <h1>Traffic Light & Pothole Detection</h1>
+    <ul class="nav-links">
+        <li><a href="#">Home</a></li>
+        <li><a href="#">About Us</a></li>
+        <li><a href="#">Contact</a></li>
+    </ul>
+</nav>
+
+<div class="container">
+    <div class="info-container">
+        <h2>Smart Detection System</h2>
+        <p>Use the buttons below to detect traffic lights or potholes in real-time using the live video feed.</p>
+        <button id="light-btn">Can I Go?</button>
+         
+        <div class="output" id="light-output">Traffic light detection result will appear here.</div>
+        <button id="pothole-btn">Detect Pothole</button>
+         
+        <div class="output" id="pothole-output">Pothole detection result will appear here.</div>
+
+        <audio id="audioPlayer" style="display: none;" autoplay>
+            <source id="audioSource" src="/audio-file" type="audio/mp3">
+            Your browser does not support the audio element.
+          </audio>
+    </div>
+    <div class="video-container">
+        <h2>Live Webcam Feed</h2>
+        <video id="video-feed" autoplay muted playsinline></video>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById("video-feed");
+
+    function playAudio() {
+      const audioPlayer = document.getElementById('audioPlayer');
+      const audioSource = document.getElementById('audioSource');
+      
+      // Fetch the audio file from the backend and set it as the source
+      fetch('/audio-file')
+        .then(response => response.blob())
+        .then(audioBlob => {
+          const audioURL = URL.createObjectURL(audioBlob);
+          audioSource.src = audioURL;
+          audioPlayer.load();  // Reload the audio player with the new source
+          audioPlayer.play();  // Play the audio
+        })
+        .catch(error => console.error('Error loading audio:', error));
+    }
+
+    function playBeep() {
+      const audioPlayer = document.getElementById('audioPlayer');
+      const audioSource = document.getElementById('audioSource');
+      
+      // Fetch the audio file from the backend and set it as the source
+      fetch('/audio-beep')
+        .then(response => response.blob())
+        .then(audioBlob => {
+          const audioURL = URL.createObjectURL(audioBlob);
+          audioSource.src = audioURL;
+          audioPlayer.load();  // Reload the audio player with the new source
+          audioPlayer.play();  // Play the audio
+        })
+        .catch(error => console.error('Error loading audio:', error));
+    }
+
+    
+    async function startWebcam() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+        } catch (error) {
+            console.error("Error accessing webcam:", error);
+            alert("Unable to access the webcam. Please check your permissions.");
+        }
+    }
+
+     
+    document.getElementById("light-btn").addEventListener("click", async () => {
+        document.getElementById("light-output").textContent = "Detecting traffic light...";
+        try {
+             
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL("image/png");
+
+            
+            const response = await fetch("/detect_light", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ image: imageData })
+            });
+            const result = await response.json();
+            document.getElementById("light-output").textContent = `Traffic Light: ${result.color} - ${result.message}`;
+            playAudio();
+            
+        } catch (error) {
+            document.getElementById("light-output").textContent = "Error detecting traffic light.";
+        }
+    });
+
+    
+    document.getElementById("pothole-btn").addEventListener("click", async () => {
+        document.getElementById("pothole-output").textContent = "Detecting pothole...";
+        try {
+             
+            const canvas = document.createElement("canvas");
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL("image/png"); 
+
+            const response = await fetch("/detect_pothole", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ image: imageData })
+            });
+            const result = await response.json();
+            document.getElementById("pothole-output").textContent = `Pothole: ${result.pothole}`;
+            if (result.pothole == "Pothole Detected") {
+                for (let i = 0; i < 4; i++) { // Loop to play the beep 5 times
+                    setTimeout(() => {
+                        playBeep();
+                    }, i * 1000); // Play beep every second
+                }
+            }
+
+            
+             
+        } catch (error) {
+            document.getElementById("pothole-output").textContent = "Error detecting pothole.";
+        }
+    }); 
+    
+    startWebcam();
+</script> 
+</body>
+</html>

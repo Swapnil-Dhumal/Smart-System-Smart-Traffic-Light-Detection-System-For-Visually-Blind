@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Traffic Light Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f0f4f8;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            
+        }
+
+    .video-container-div{
+
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+
+    }
+
+        
+
+        h1 {
+            color: #007acc;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        input[type="file"] {
+            display: block;
+            margin: 10px auto 20px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        input[type="file"]:hover {
+            border-color: #007acc;
+            background: #f9f9f9;
+        }
+
+        video {
+            width: 80%;
+            max-width: 800px; 
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        canvas {
+            display: none;
+        }
+
+        #processedFrame {
+            width: 80%;
+            max-width: 800px;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        footer a {
+            color: #007acc;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Traffic Light Video Processor</h1>
+    <input type="file" id="videoInput" accept="video/*">
+    
+    <div class="video-container-div">
+        <video id="video" controls></video>
+        <canvas id="canvas"></canvas>
+        <img id="processedFrame" alt="Processed Frame">
+    </div>
+    
+    <!-- Hidden Audio Player -->
+    <audio id="audioPlayer" style="display:none;">
+        <source id="audioSource" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
+    <script>
+        const videoInput = document.getElementById('videoInput');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const processedFrame = document.getElementById('processedFrame');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioSource = document.getElementById('audioSource');
+        const ctx = canvas.getContext('2d');
+
+        let count_class = 0;
+        let current_class = "";
+        let frameIndex = 0;
+
+        // Play audio function
+        function playAudio() {
+            fetch('/audio-file')
+                .then(response => response.blob())
+                .then(audioBlob => {
+                    const audioURL = URL.createObjectURL(audioBlob);
+                    audioSource.src = audioURL;
+                    audioPlayer.load();  // Reload the audio player with the new source
+                    audioPlayer.play();  // Play the audio
+                })
+                .catch(error => console.error('Error loading audio:', error));
+        }
+
+        // Handle video input change
+        videoInput.addEventListener('change', () => {
+            const file = videoInput.files[0];
+            if (file) {
+                video.src = URL.createObjectURL(file);
+                video.load();
+            }
+        });
+
+        // Process frames at a throttled rate
+        video.addEventListener('play', () => {
+            const fps = 30; // Desired FPS
+            const interval = 1000 / fps; 
+
+            const processFrame = () => {
+                if (!video.paused && !video.ended) {
+
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    // Process every 5th frame
+                    if (frameIndex % 5 === 0) {
+                        const frameData = canvas.toDataURL('image/jpeg');
+                        fetch('/process_frame', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ frame: frameData })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            processedFrame.src = data.processed_frame;
+
+                            // Check class change and play audio if necessary
+                            if (data.class !== current_class && count_class === 0) {
+                                current_class = data.class;
+                                count_class = 5;
+                                playAudio();
+                            } else if (data.class === current_class) {
+                                count_class = 5;
+                            } else {
+                                count_class -= 1;
+                            }
+
+                            console.log(data.class, count_class, current_class);
+                        })
+                        .catch(error => console.error('Error processing frame:', error));
+                    }
+
+                    frameIndex++;
+                    setTimeout(processFrame, interval);
+                }
+            };
+
+            processFrame();
+        });
+    </script>
+</body>
+</html>

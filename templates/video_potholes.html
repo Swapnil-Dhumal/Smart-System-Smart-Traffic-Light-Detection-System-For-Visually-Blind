@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Traffic Light Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f0f4f8;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        h1 {
+            color: #007acc;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        input[type="file"] {
+            display: block;
+            margin: 10px auto 20px;
+            padding: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        input[type="file"]:hover {
+            border-color: #007acc;
+            background: #f9f9f9;
+        }
+
+        video {
+            width: 80%;
+            max-width: 800px;
+            margin-bottom: 20px;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        canvas {
+            display: none;
+        }
+
+        #processedFrame {
+            width: 80%;
+            max-width: 800px;
+            margin-top: 20px;
+            border: 2px solid #007acc;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        footer {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        footer a {
+            color: #007acc;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <audio id="audioPlayer" style="display: none;" autoplay>
+        <source id="audioSource" src="/audio-file" type="audio/mp3">
+        Your browser does not support the audio element.
+      </audio>
+    <h1>Pothole Video Processor</h1>
+    <input type="file" id="videoInput" accept="video/*">
+    <video id="video" controls></video>
+    <canvas id="canvas"></canvas>
+    <img id="processedFrame" alt="Processed Frame">
+    
+    <!-- Hidden Audio Player -->
+    <audio id="audioPlayer" style="display:none;">
+        <source id="audioSource" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
+    <script>
+        const videoInput = document.getElementById('videoInput');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const processedFrame = document.getElementById('processedFrame');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const audioSource = document.getElementById('audioSource');
+        const ctx = canvas.getContext('2d');
+
+        let count_class = 0;
+        let current_class = "";
+        let frameIndex = 0;
+
+        // Play audio function
+        function playBeep() {
+            const audioPlayer = document.getElementById('audioPlayer');
+            const audioSource = document.getElementById('audioSource');
+            
+            // Fetch the audio file from the backend and set it as the source
+            fetch('/audio-beep')
+                .then(response => response.blob())
+                .then(audioBlob => {
+                const audioURL = URL.createObjectURL(audioBlob);
+                audioSource.src = audioURL;
+                audioPlayer.load();  // Reload the audio player with the new source
+                audioPlayer.play();  // Play the audio
+                })
+                .catch(error => console.error('Error loading audio:', error));
+            }
+
+        // Handle video input change
+        videoInput.addEventListener('change', () => {
+            const file = videoInput.files[0];
+            if (file) {
+                video.src = URL.createObjectURL(file);
+                video.load();
+            }
+        });
+
+        // Process frames at a throttled rate
+        video.addEventListener('play', () => {
+            const fps = 30; // Desired FPS
+            const interval = 1000 / fps; 
+
+            const processFrame = () => {
+                if (!video.paused && !video.ended) {
+
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    if (frameIndex % 5 === 0) {
+                        const frameData = canvas.toDataURL('image/jpeg');
+                        fetch('/process_frame_potholes', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ frame: frameData })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            processedFrame.src = data.processed_frame;
+
+                            // Check class change and play audio if necessary
+                            if(data.class != "None"){
+                                playBeep();
+                            }
+
+                            console.log(data.class, count_class, current_class);
+                        })
+                        .catch(error => console.error('Error processing frame:', error));
+                    }
+
+                    frameIndex++;
+                    setTimeout(processFrame, interval);
+                }
+            };
+
+            processFrame();
+        });
+    </script>
+</body>
+</html>
